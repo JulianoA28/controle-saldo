@@ -50,8 +50,9 @@
         <v-tab-item>
           <v-card flat>
             <v-card-text>
-              The legacy <strong>current balance</strong> was kept as the source of truth. These items differ from
-              <em>initial balance − confirmed orders</em>; red ones would be negative if recalculated.
+              Reconciliation check: items whose legacy <strong>current balance</strong> (kept as the balance) differs
+              from <em>initial balance − confirmed orders</em> after cleaning. With the provided files this list is
+              empty; the naive 2,893 divergences came from counting resent duplicates.
               See <code>docs/adr/0002-legacy-data-load.md</code>.
               <v-switch v-model="onlyNegative" label="Only items that would become negative" @change="reloadDivergences" />
             </v-card-text>
@@ -61,6 +62,7 @@
               :options.sync="divergenceOptions"
               :server-items-length="divergences.totalElements"
               :loading="loadingDivergences"
+              no-data-text="No divergences: every item's balance matches its order history"
               :footer-props="{ itemsPerPageOptions: [10, 20, 50, 100] }"
               dense
               @update:options="loadDivergences"

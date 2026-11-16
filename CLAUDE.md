@@ -24,6 +24,7 @@ Domain glossary: item = item, pedido = **order** (table `orders`, since `ORDER` 
 ```
 backend/    Spring Boot (packages by domain: item, order, agency, dataload, common)
 frontend/   Vue 2 + Vuetify
+dataload/   load.sh (COPY + CALL dataload_process(); run by the `dataload` compose service)
 docs/       decisions (short ADRs), ai-usage.md
 data/       legacy CSVs (NOT versioned — in .gitignore)
 docker-compose.yml
@@ -47,8 +48,10 @@ README.md
   avoid deadlocks between concurrent orders.
 - R3: `UPDATE orders SET status='CANCELLED' ... WHERE id = :id AND status='CONFIRMED'`;
   0 rows affected = already cancelled → business error (409). Balance returned in the same transaction.
-- R5: optimistic locking (`@Version`) on the Item entity; conflict → HTTP 409 with the current state;
-  the frontend shows the conflict and lets the user reload/reapply.
+- R5: optimistic locking (`@Version`) on the Item's descriptive fields; conflict → HTTP 409 with
+  the current state; the frontend shows the conflict and lets the user reload/reapply.
+  The balance is `updatable = false` in JPA and only changes via atomic SQL deltas
+  (order debit/credit, logged manual adjustments) — see ADR 0003.
 - R6: `UNIQUE (external_id)`. Resend with the same id → returns the existing order
   (idempotent response), never creates another. Handle the race via the unique violation.
 - Messaging and cache: **not used** (justified in the README). Do not add without discussing.
@@ -61,10 +64,13 @@ in SQL, then insert into final tables. Rejected rows go to a quarantine table wi
 - 250 `pedido_itens` rows with non-existent item; 150 with non-existent order
 - 200 invalid quantities (≤ 0 or non-numeric)
 - Dirty units (` UN`, `un`, `Un`, `Cx`...) → normalize (trim + upper)
-- 2,893 items with `saldo_atual` ≠ `saldo_inicial − Σ confirmed orders`
-- 328 items would become negative if the balance were recalculated
-- **Assumption to decide/record:** which balance is the source of truth and what to do with
-  orders that exceed the balance.
+- 2,893 items with `saldo_atual` ≠ `saldo_inicial − Σ confirmed orders` and 328 negative —
+  **only when duplicated lines of resent orders are counted**. After cleaning: 0 divergences.
+- **Decided (ADR 0002):** `saldo_atual` loaded as the balance (it matches the cleaned history);
+  reconciliation kept as a check in `dataload_divergence`. Orders with any invalid line are
+  quarantined whole (R2) — loading them partially would make 331 items diverge.
+- Load logic: `dataload_process()` procedure in Flyway `V3__dataload.sql`; tested by
+  `DataloadProcedureIntegrationTest`.
 
 ## Conventions
 - DTOs separate from entities; never expose JPA entities in controllers
