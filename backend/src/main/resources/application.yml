@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: balance-control
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/balance_control}
+    username: ${DB_USER:balance_control}
+    password: ${DB_PASSWORD:balance_control}
+  jpa:
+    # Flyway owns the schema; Hibernate only checks that entities match it.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
