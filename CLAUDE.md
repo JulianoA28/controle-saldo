@@ -78,8 +78,9 @@ in SQL, then insert into final tables. Rejected rows go to a quarantine table wi
 ```bash
 docker compose up --build           # start everything
 cd backend && ./mvnw test           # backend tests
-cd frontend && npm run dev          # frontend in dev mode
+cd frontend && npm run dev          # frontend in dev mode (:5173, proxies /api to :8080)
 ```
+Ports in Docker: frontend 8081, backend 8080, db 5432. Integration tests need Docker running.
 (update as the project evolves)
 
 ## AI usage (part of the evaluation)
