@@ -1,83 +1,90 @@
-# CLAUDE.md — Controle de saldo de itens e pedidos de órgãos públicos
+# CLAUDE.md — Item balance and order control for public agencies
 
-> Desafio técnico (Full Stack Pleno) de um processo seletivo. A avaliação pesa mais
-> **decisões e justificativas** do que quantidade de funcionalidades. Todo código
-> gerado precisa ser entendido e defendido pelo autor (Juliano).
+> Technical challenge (Full Stack, mid-level) for a hiring process. The evaluation weighs
+> **decisions and their justification** more than the number of features. All generated
+> code must be understood and defended by the author (Juliano).
 
-## Stack (obrigatória — não trocar)
-- Backend: Java 17 + Spring Boot **2.7.x** (javax.*, NÃO jakarta.*), Maven
-- Frontend: **Vue 2** + **Vuetify 2** (não usar Vue 3, Composition API do Vue 3 ou Vuetify 3)
-- Banco: PostgreSQL 16
-- Tudo sobe com `docker compose up` (banco, backend, frontend e a carga de dados)
-- Migrações de schema: Flyway
-- Testes: JUnit 5 + Testcontainers (Postgres real; nada de H2 para testar concorrência)
+## Stack (mandatory — do not change)
+- Backend: Java 17 + Spring Boot **2.7.x** (javax.*, NOT jakarta.*), Maven
+- Frontend: **Vue 2** + **Vuetify 2** (no Vue 3, no Vue 3 Composition API, no Vuetify 3)
+- Database: PostgreSQL 16
+- Everything starts with `docker compose up` (database, backend, frontend and the data load)
+- Schema migrations: Flyway
+- Tests: JUnit 5 + Testcontainers (real Postgres; no H2 for concurrency tests)
 
-## Estrutura
+## Language
+**Everything in English**: code, identifiers, file names, DB tables/columns, comments,
+docs, commit messages. Only exception: legacy CSV column names (e.g. `id_externo`) are kept
+as-is in the staging tables and mapped to English names in the final tables.
+
+Domain glossary: item = item, pedido = **order** (table `orders`, since `ORDER` is reserved),
+órgão = **agency**, saldo = **balance**, carga = **data load**.
+
+## Structure
 ```
-backend/    Spring Boot (pacotes por domínio: item, pedido, orgao, carga, common)
+backend/    Spring Boot (packages by domain: item, order, agency, dataload, common)
 frontend/   Vue 2 + Vuetify
-docs/       decisões (ADRs curtas), uso-ia.md
-data/       CSVs da massa (NÃO versionar — está no .gitignore)
+docs/       decisions (short ADRs), ai-usage.md
+data/       legacy CSVs (NOT versioned — in .gitignore)
 docker-compose.yml
 README.md
 ```
 
-## Regras de negócio (invariantes — valem também para os dados carregados)
-1. Item: código único, descrição, unidade, saldo disponível. **Saldo nunca negativo.**
-2. Pedido pertence a um órgão, tem ≥ 1 item. **Atendido por inteiro ou não atendido.**
-3. Pedido pode ser cancelado; quantidades voltam ao saldo. **Cancela uma vez só.**
-4. Muitos usuários simultâneos pedindo os mesmos itens.
-5. Dois gestores editando o mesmo item: **nenhuma alteração perdida sem alguém saber.**
-6. Integração reenvia a mesma requisição com o mesmo identificador:
-   **o mesmo pedido nunca é registrado duas vezes.**
+## Business rules (invariants — also apply to loaded data)
+1. Item: unique code, description, unit, available balance. **Balance is never negative.**
+2. An order belongs to one agency and has ≥ 1 item. **Fulfilled entirely or not at all.**
+3. An order can be cancelled; quantities return to the balance. **Cancelled only once.**
+4. Many concurrent users ordering the same items.
+5. Two managers editing the same item: **no change is lost without someone knowing.**
+6. An integration resends the same request with the same identifier:
+   **the same order is never registered twice.**
 
-## Como cada regra é garantida (decisões atuais — revisar se mudar)
-- R1: `CHECK (saldo >= 0)` no banco + validação no serviço. A constraint é a garantia final.
-- R2/R4: registro de pedido numa única transação. Débito atômico por item:
-  `UPDATE item SET saldo = saldo - :q WHERE id = :id AND saldo >= :q` — se alguma linha
-  afetada = 0, rollback do pedido inteiro. Itens processados **ordenados por id** para
-  evitar deadlock entre pedidos concorrentes.
-- R3: `UPDATE pedido SET situacao='CANCELADO' ... WHERE id = :id AND situacao='CONFIRMADO'`;
-  0 linhas afetadas = já cancelado → erro de negócio (409). Devolução de saldo na mesma transação.
-- R5: lock otimista (`@Version`) na entidade Item; conflito → HTTP 409 com o estado atual;
-  o front mostra o conflito e deixa o usuário recarregar/reaplicar.
-- R6: `UNIQUE (id_externo)`. Reenvio com mesmo id → devolve o pedido já existente
-  (resposta idempotente), não cria outro. Tratar a corrida via violação da unique.
-- Mensageria e cache: **não usados** (decisão justificada no README). Não adicionar sem discutir.
+## How each rule is enforced (current decisions — revisit if they change)
+- R1: `CHECK (balance >= 0)` in the database + validation in the service. The constraint is the final guarantee.
+- R2/R4: order registration in a single transaction. Atomic debit per item:
+  `UPDATE item SET balance = balance - :q WHERE id = :id AND balance >= :q` — if any update
+  affects 0 rows, the whole order is rolled back. Items processed **sorted by id** to
+  avoid deadlocks between concurrent orders.
+- R3: `UPDATE orders SET status='CANCELLED' ... WHERE id = :id AND status='CONFIRMED'`;
+  0 rows affected = already cancelled → business error (409). Balance returned in the same transaction.
+- R5: optimistic locking (`@Version`) on the Item entity; conflict → HTTP 409 with the current state;
+  the frontend shows the conflict and lets the user reload/reapply.
+- R6: `UNIQUE (external_id)`. Resend with the same id → returns the existing order
+  (idempotent response), never creates another. Handle the race via the unique violation.
+- Messaging and cache: **not used** (justified in the README). Do not add without discussing.
 
-## Massa de dados legada (achados — ver README seção "Carga")
-Arquivos UTF-8, `;`, com cabeçalho. Carga: `COPY` para tabelas `stg_*`, limpeza/validação
-em SQL, depois insert nas tabelas finais. Rejeitados vão para tabela de quarentena com motivo.
-- 2.000 linhas de `pedidos.csv` com `id_externo` repetido (linhas idênticas = reenvio)
-- 300 pedidos de órgão inexistente; 100 pedidos sem itens
-- 250 `pedido_itens` com item inexistente; 150 com pedido inexistente
-- 200 quantidades inválidas (≤ 0 ou não numéricas)
-- Unidades sujas (` UN`, `un`, `Un`, `Cx`...) → normalizar (trim + upper)
-- 2.893 itens com `saldo_atual` ≠ `saldo_inicial − Σ pedidos confirmados`
-- 328 itens ficariam negativos se o saldo for recalculado
-- **Premissa a decidir/registrar:** qual saldo é a verdade e o que fazer com pedidos
-  que estouram o saldo.
+## Legacy data (findings — see README section "Data load")
+Files are UTF-8, `;`-separated, with header. Load: `COPY` into `stg_*` tables, cleaning/validation
+in SQL, then insert into final tables. Rejected rows go to a quarantine table with a reason.
+- 2,000 rows in `pedidos.csv` with repeated `id_externo` (identical rows = resend)
+- 300 orders from non-existent agencies; 100 orders without items
+- 250 `pedido_itens` rows with non-existent item; 150 with non-existent order
+- 200 invalid quantities (≤ 0 or non-numeric)
+- Dirty units (` UN`, `un`, `Un`, `Cx`...) → normalize (trim + upper)
+- 2,893 items with `saldo_atual` ≠ `saldo_inicial − Σ confirmed orders`
+- 328 items would become negative if the balance were recalculated
+- **Assumption to decide/record:** which balance is the source of truth and what to do with
+  orders that exceed the balance.
 
-## Convenções
-- Código e nomes em português no domínio (Item, Pedido, Orgao, saldo), inglês no técnico
-- DTOs separados das entidades; nunca expor entidade JPA no controller
-- Erros de negócio com exceções próprias → `@ControllerAdvice` → JSON padronizado
-  (`codigo`, `mensagem`, `detalhes`), com status HTTP coerente (400/404/409/422)
-- Consultas paginadas sempre (base tem 1 milhão de pedidos); nada de `findAll()` sem página
-- Índices criados nas migrações, junto da consulta que os justifica
-- Commits pequenos, mensagem no imperativo, em português
+## Conventions
+- DTOs separate from entities; never expose JPA entities in controllers
+- Business errors via custom exceptions → `@RestControllerAdvice` → standard JSON
+  (`code`, `message`, `details`), with consistent HTTP status (400/404/409/422)
+- Always paginate queries (1 million orders); no unpaged `findAll()`
+- Indexes created in migrations, next to the query that justifies them
+- Small commits, imperative mood, in English
 
-## Comandos
+## Commands
 ```bash
-docker compose up --build           # sobe tudo
-cd backend && ./mvnw test           # testes backend
-cd frontend && npm run dev          # front em modo dev
+docker compose up --build           # start everything
+cd backend && ./mvnw test           # backend tests
+cd frontend && npm run dev          # frontend in dev mode
 ```
-(atualizar conforme o projeto evoluir)
+(update as the project evolves)
 
-## Uso de IA (faz parte da avaliação)
-- Ao final de cada tarefa relevante, adicionar uma entrada em `docs/uso-ia.md`:
-  data, o que foi pedido, o que foi aceito, **o que foi rejeitado/corrigido e por quê**.
-- Antes de implementar algo não trivial, propor o plano e esperar aprovação.
-- Não inventar premissas silenciosamente: se uma regra for ambígua, perguntar ou
-  registrar a premissa em `docs/` e no README.
+## AI usage (part of the evaluation)
+- At the end of each relevant task, add an entry to `docs/ai-usage.md`:
+  date, what was asked, what was accepted, **what was rejected/corrected and why**.
+- Before implementing anything non-trivial, propose the plan and wait for approval.
+- Do not invent assumptions silently: if a rule is ambiguous, ask or
+  record the assumption in `docs/` and in the README.
