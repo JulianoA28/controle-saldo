@@ -6,13 +6,18 @@ import java.util.stream.Collectors;
 import javax.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 
 /**
  * Maps exceptions to {@link ErrorResponse}. Business exceptions carry their own status;
@@ -45,9 +50,37 @@ public class ApiExceptionHandler {
         return badRequest("INVALID_DATA", "The request has invalid parameters.", fields);
     }
 
-    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
+            MissingServletRequestParameterException.class})
     public ResponseEntity<ErrorResponse> malformed(Exception ex) {
         return badRequest("MALFORMED_REQUEST", "Malformed request or invalid types.", List.of());
+    }
+
+    @ExceptionHandler(NoHandlerFoundException.class)
+    public ResponseEntity<ErrorResponse> noRoute(NoHandlerFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("ROUTE_NOT_FOUND", "No endpoint for " + ex.getHttpMethod() + " " + ex.getRequestURL()));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> methodNotAllowed(HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ErrorResponse.of("METHOD_NOT_ALLOWED", "Method " + ex.getMethod() + " is not supported here."));
+    }
+
+    /** Safety net: services translate the expected cases; anything reaching here is still a conflict. */
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> optimisticLock(ObjectOptimisticLockingFailureException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("CONCURRENT_MODIFICATION", "The record was changed by someone else. Reload and try again."));
+    }
+
+    /** Safety net for constraints not translated by a service (the database is the last line of defense). */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> integrity(DataIntegrityViolationException ex) {
+        log.warn("Untranslated integrity violation", ex);
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("DATA_INTEGRITY_VIOLATION", "The operation violates a data integrity rule."));
     }
 
     @ExceptionHandler(Exception.class)

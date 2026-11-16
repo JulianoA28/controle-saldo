@@ -1,6 +1,9 @@
 package br.com.balancecontrol;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -20,6 +23,37 @@ public abstract class AbstractIntegrationTest {
 
     static {
         POSTGRES.start();
+    }
+
+    @Autowired
+    protected JdbcTemplate jdbc;
+
+    /** Every test starts from empty domain tables (the schema itself comes from Flyway). */
+    @BeforeEach
+    void cleanDatabase() {
+        jdbc.execute("TRUNCATE order_item, orders, item_balance_adjustment, item, agency RESTART IDENTITY CASCADE");
+    }
+
+    protected long insertAgency(String code) {
+        return jdbc.queryForObject("INSERT INTO agency (code, acronym, name, state) VALUES (?, ?, ?, 'DF') RETURNING id",
+                Long.class, code, code, "Agency " + code);
+    }
+
+    protected long insertItem(String code, int balance) {
+        return insertItem(code, balance, true);
+    }
+
+    protected long insertItem(String code, int balance, boolean active) {
+        return jdbc.queryForObject("INSERT INTO item (code, description, unit, balance, active) VALUES (?, ?, 'UN', ?, ?) RETURNING id",
+                Long.class, code, "Item " + code, balance, active);
+    }
+
+    protected int balanceOf(long itemId) {
+        return jdbc.queryForObject("SELECT balance FROM item WHERE id = ?", Integer.class, itemId);
+    }
+
+    protected int count(String sql, Object... args) {
+        return jdbc.queryForObject(sql, Integer.class, args);
     }
 
     @DynamicPropertySource

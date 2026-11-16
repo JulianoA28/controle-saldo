@@ -1,4 +1,10 @@
 spring:
+  data:
+    web:
+      pageable:
+        # Large pages on a 1M-row table are a self-inflicted outage.
+        max-page-size: 100
+        default-page-size: 20
   application:
     name: balance-control
   datasource:
@@ -16,6 +22,12 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
+  mvc:
+    # Unknown routes go through ApiExceptionHandler (standard JSON) instead of Spring's default body.
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
 
 management:
   endpoints:

@@ -8,22 +8,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 class ApplicationIntegrationTest extends AbstractIntegrationTest {
-
-    @Autowired
-    JdbcTemplate jdbc;
 
     @Autowired
     TestRestTemplate http;
 
     @Test
-    void appliesFlywayMigrations() {
+    void allFlywayMigrationsSucceeded() {
         Integer applied = jdbc.queryForObject(
-                "SELECT count(*) FROM flyway_schema_history WHERE version = '1' AND success",
+                "SELECT count(*) FROM flyway_schema_history WHERE NOT success",
                 Integer.class);
-        assertThat(applied).isEqualTo(1);
+        assertThat(applied).isZero();
     }
 
     @Test
