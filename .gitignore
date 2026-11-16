@@ -1,0 +1,19 @@
+# Massa de dados (grande demais para o Git)
+data/
+
+# Java / Maven
+target/
+*.class
+*.log
+
+# Node / Vue
+node_modules/
+dist/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+
+# Ambiente
+.env
