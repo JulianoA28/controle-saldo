@@ -34,5 +34,22 @@ services:
     depends_on:
       - backend
 
+  # One-shot legacy data load: waits for Flyway, COPYs ./data CSVs (or the zip), validates in SQL.
+  dataload:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: db
+      PGDATABASE: ${DB_NAME:-balance_control}
+      PGUSER: ${DB_USER:-balance_control}
+      PGPASSWORD: ${DB_PASSWORD:-balance_control}
+    volumes:
+      - ./dataload/load.sh:/load.sh:ro
+      - ./data:/data:ro
+    entrypoint: ["/bin/sh", "/load.sh"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   db-data:

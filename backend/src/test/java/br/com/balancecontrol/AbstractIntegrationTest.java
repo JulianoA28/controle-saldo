@@ -31,7 +31,8 @@ public abstract class AbstractIntegrationTest {
     /** Every test starts from empty domain tables (the schema itself comes from Flyway). */
     @BeforeEach
     void cleanDatabase() {
-        jdbc.execute("TRUNCATE order_item, orders, item_balance_adjustment, item, agency RESTART IDENTITY CASCADE");
+        jdbc.execute("TRUNCATE dataload_divergence, dataload_rejection, dataload_run, order_item, orders,"
+                + " item_balance_adjustment, item, agency RESTART IDENTITY CASCADE");
     }
 
     protected long insertAgency(String code) {
