@@ -36,18 +36,26 @@ The business rules (R1–R6) must hold for loaded data too.
    - Orders with no lines → `NO_ITEMS`. Lines whose order doesn't exist → `ORDER_NOT_FOUND`.
    - Legacy timestamps have no time zone; they are read as `America/Sao_Paulo` and stored as `timestamptz`.
 5. **Which balance is the truth — resolved by the data.** A naive recalculation
-   (`saldo_inicial − Σ quantities of confirmed orders`, straight from the CSVs) shows
-   **2,893 divergent items, 328 of them negative**. Those numbers come entirely from the
-   **duplicated lines of resent orders** being counted twice (reproduced with `awk` over the
-   raw files: exactly 2,893 / 328).
-   After cleaning (resends deduplicated, invalid orders quarantined), the recalculation
-   matches the legacy `saldo_atual` for **all 50,000 items: 0 divergences**. So `saldo_atual`
-   is loaded as the balance, and the two candidate sources of truth agree.
+   (`saldo_inicial − Σ quantities of every line of a confirmed id`, straight from the CSVs)
+   shows **2,893 divergent items, 328 of them negative**. Recomputed independently from the
+   raw files, removing one cause at a time:
 
-   The same check backs decision 4: if the valid lines of the 420 confirmed orders rejected
-   as `INVALID_LINES` had been loaded (partial orders), **331 items** would diverge from the
-   legacy balance. The legacy system never counted those orders, so rejecting them whole is
-   what the data shows, not just a preference.
+   | Recalculation | Divergent items |
+   |---|---:|
+   | Naive (every line, including duplicates and quantities ≤ 0) | 2,893 |
+   | Duplicated lines of resent orders counted once | 707 |
+   | … and orders from unknown agencies excluded | 331 |
+   | … and orders with any invalid line excluded (= what the load does) | **0** |
+
+   Duplicates are the biggest cause, but not the only one: the legacy system also never
+   counted orders from unknown agencies, nor orders with an invalid line. After the same
+   cleaning the load applies, the recalculation matches the legacy `saldo_atual` for **all
+   50,000 items: 0 divergences**. So `saldo_atual` is loaded as the balance, and the two
+   candidate sources of truth agree.
+
+   The same check backs decision 4: loading the valid lines of the 420 confirmed orders
+   rejected as `INVALID_LINES` (partial orders) would make **331 items** diverge from the
+   legacy balance. Rejecting them whole is what the data shows, not just a preference.
 
    The reconciliation stays in the load as a permanent check: any divergence would be
    recorded in `dataload_divergence` (initial, legacy, confirmed, recalculated) and shown in

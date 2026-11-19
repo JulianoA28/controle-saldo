@@ -65,7 +65,9 @@ in SQL, then insert into final tables. Rejected rows go to a quarantine table wi
 - 200 invalid quantities (≤ 0 or non-numeric)
 - Dirty units (` UN`, `un`, `Un`, `Cx`...) → normalize (trim + upper)
 - 2,893 items with `saldo_atual` ≠ `saldo_inicial − Σ confirmed orders` and 328 negative —
-  **only when duplicated lines of resent orders are counted**. After cleaning: 0 divergences.
+  **only in a naive sum** (duplicated lines of resent orders, unknown-agency orders and
+  orders with invalid lines all counted: 2,893 → 707 → 331 → 0 as each is removed).
+  After cleaning: 0 divergences.
 - **Decided (ADR 0002):** `saldo_atual` loaded as the balance (it matches the cleaned history);
   reconciliation kept as a check in `dataload_divergence`. Orders with any invalid line are
   quarantined whole (R2) — loading them partially would make 331 items diverge.

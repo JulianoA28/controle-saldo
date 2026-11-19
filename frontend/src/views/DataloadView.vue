@@ -52,7 +52,8 @@
             <v-card-text>
               Reconciliation check: items whose legacy <strong>current balance</strong> (kept as the balance) differs
               from <em>initial balance − confirmed orders</em> after cleaning. With the provided files this list is
-              empty; the naive 2,893 divergences came from counting resent duplicates.
+              empty; the naive 2,893 divergences came from counting resent duplicates, orders from unknown
+              agencies and orders with invalid lines.
               See <code>docs/adr/0002-legacy-data-load.md</code>.
               <v-switch v-model="onlyNegative" label="Only items that would become negative" @change="reloadDivergences" />
             </v-card-text>
