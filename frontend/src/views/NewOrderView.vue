@@ -84,7 +84,9 @@ export default {
   methods: {
     required: (v) => (v !== null && v !== undefined && String(v).trim() !== '') || 'Required',
     max: (n) => (v) => !v || String(v).length <= n || `At most ${n} characters`,
-    positiveInt: (v) => (Number.isInteger(v) && v > 0) || 'Whole number > 0',
+    // Vuetify validates its own copy of the input, which stays a string ("1") when the typed
+    // value equals the current model value; so accept numeric strings, not only numbers.
+    positiveInt: (v) => (String(v).trim() !== '' && Number.isInteger(Number(v)) && Number(v) > 0) || 'Whole number > 0',
     notRepeated(index) {
       return (item) => !item || !this.lines.some((l, j) => j !== index && l.item && l.item.id === item.id)
         || 'Item already in this order'

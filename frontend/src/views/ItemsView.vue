@@ -136,6 +136,8 @@ import { itemsApi } from '../api'
 import { notify, notifyError } from '../notify'
 import { formatDateTime, formatNumber } from '../utils/format'
 
+const isInt = (v) => v !== null && v !== undefined && String(v).trim() !== '' && Number.isInteger(Number(v))
+
 export default {
   name: 'ItemsView',
   components: { ErrorAlert },
@@ -195,8 +197,10 @@ export default {
     formatDateTime,
     required: (v) => (v !== null && v !== undefined && String(v).trim() !== '') || 'Required',
     max: (n) => (v) => !v || String(v).length <= n || `At most ${n} characters`,
-    nonNegativeInt: (v) => (Number.isInteger(v) && v >= 0) || 'Whole number ≥ 0',
-    nonZeroInt: (v) => (Number.isInteger(v) && v !== 0) || 'Whole number, not zero',
+    // Vuetify validates its own copy of the input, which stays a string ("0") when the typed
+    // value equals the current model value; so accept numeric strings, not only numbers.
+    nonNegativeInt: (v) => (isInt(v) && Number(v) >= 0) || 'Whole number ≥ 0',
+    nonZeroInt: (v) => (isInt(v) && Number(v) !== 0) || 'Whole number, not zero',
 
     async load() {
       this.loading = true
