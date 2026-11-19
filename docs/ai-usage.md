@@ -94,3 +94,41 @@ reproduced (removing the sort → real PostgreSQL deadlocks).
   which also adds the negative quantities. Removing duplicates alone leaves 707 divergent items;
   excluding unknown-agency orders leaves 331; excluding orders with invalid lines gives 0. The
   conclusion stands, but the docs should give this breakdown instead of "only duplicates".
+
+## 2026-11-19 — Pre-delivery review, README execution guide, merge to master
+
+**Asked:** test everything from zero, review every line of code against the rules, update the
+README with everything needed to run the project, and merge to `master` if all is OK.
+
+**Accepted (verified):**
+- Full read of backend, migrations, load script, frontend, tests and docs against R1–R6 and the
+  `CLAUDE.md` conventions (no entity in controllers, paginated queries, standard errors, English).
+- 30/30 tests green. Fresh clone + `docker compose up --build` with only the zip: load in 177 s,
+  numbers identical to ADR 0002; second `up` skips the load. Every source row accounted for
+  (loaded + quarantined = file rows); invariants checked in SQL on the loaded data.
+- Balances re-reconciled from the raw CSVs by an independent Python script (not the SQL
+  procedure): 0 divergences after cleaning.
+- Every endpoint and error code through nginx; R3/R4/R5/R6 under parallel HTTP requests
+  (200 orders on 50 units → 50 × 201, 150 × 422, balance 0; 50 resends → 1 × 201, 49 × 200;
+  30 cancels → 1 × 200, 29 × 409; 20 edits on one version → 1 × 200, 19 × 409).
+- UI driven in headless Chromium: order list/detail/filter, new order (success and 422),
+  R5 conflict between two browser sessions, balance adjustment, data load screen.
+- README rewritten as an execution guide (requirements, data placement, services, following the
+  load, reset, configuration, troubleshooting, curl examples); performance re-measured.
+
+**Rejected / corrected:**
+- **Quantity rule blocked valid orders.** Found by the browser test: retyping the value a field
+  already holds (select "1", type "1") leaves Vuetify's internal value as the string `"1"`, so
+  `Number.isInteger(v)` failed and "Place order" did nothing while showing 1. Same pattern in the
+  item initial balance and adjustment delta rules. The rules now accept numeric strings; the
+  payload is unchanged (it reads the `.number`-cast model).
+- **Windows checkouts would break the load:** with `core.autocrlf=true`, `load.sh` gets CRLF and
+  `/bin/sh` fails on `set -eu\r` (reproduced). Added `.gitattributes` forcing LF for `*.sh`/`mvnw`.
+- **The divergence explanation was still "only duplicates"** in ADR 0002, README, `CLAUDE.md` and
+  the Data load screen, although the previous entry had found it imprecise. Replaced with the
+  breakdown (2,893 → 707 → 331 → 0), re-verified from the raw files.
+- `.gitignore` still had Portuguese comments → translated.
+- **Not changed (reported to the author for a decision):** an adjustment whose result overflows
+  `integer` returns 409 `DATA_INTEGRITY_VIOLATION` (the database still protects the data; a
+  `@Max` on `delta` or a 422 would be clearer); Hibernate logs the expected R6 unique violation
+  at ERROR level during concurrent resends (noise, not a failure).
