@@ -1,4 +1,4 @@
-# Massa de dados (grande demais para o Git)
+# Legacy data files (too large for Git)
 data/
 
 # Java / Maven
@@ -15,5 +15,5 @@ dist/
 *.iml
 .vscode/
 
-# Ambiente
+# Local environment overrides
 .env
