@@ -22,13 +22,13 @@
                 :items="line.options"
                 :loading="line.loading"
                 :search-input.sync="line.search"
-                :item-text="(it) => `${it.code} — ${it.description} (${it.balance} ${it.unit})`"
+                :item-text="itemText"
                 return-object
                 no-filter
                 hide-no-data
-                cache-items
                 label="Item"
                 :rules="[required, notRepeated(i)]"
+                @focus="line.options.length || searchItems(line, '')"
                 @update:search-input="searchItems(line, $event)"
               />
             </v-col>
@@ -92,12 +92,19 @@ export default {
     addLine() {
       this.lines.push(newLine())
     },
+    itemText: (it) => `${it.code} — ${it.description} (${it.balance} ${it.unit})`,
     searchItems(line, text) {
+      // Selecting an item fills the search box with its label: that is not a new search.
+      if (line.item && text === this.itemText(line.item)) return
       clearTimeout(line.timer)
       line.timer = setTimeout(async () => {
         line.loading = true
         try {
-          line.options = (await itemsApi.list({ page: 1, itemsPerPage: 20 }, { search: text || undefined, active: true })).content
+          const found = (await itemsApi.list({ page: 1, itemsPerPage: 20 }, { search: text || undefined, active: true })).content
+          // No cache-items (with no-filter it would keep showing stale results): keep only the
+          // selected item, so its label stays visible.
+          const selected = line.item && !found.some((it) => it.id === line.item.id) ? [line.item] : []
+          line.options = selected.concat(found)
         } finally {
           line.loading = false
         }

@@ -59,3 +59,38 @@ frontend in one go; the author reviews and refines at the end.
   duplicated lines of resent orders. Once cleaned, both balances agree. The ADR was
   rewritten with that evidence, and with the check that loading partial orders would make
   331 items diverge (which supports rejecting whole orders).
+
+## 2026-11-17 — Clean-clone verification and autocomplete fix
+
+**Asked:** run the tests and the full stack from a fresh clone, then fix a bug found by
+manual testing: on "New order", the Item dropdown showed nothing until something was typed.
+
+**Accepted:**
+- Verification: 30/30 tests green; fresh `docker compose up` loads the data in 170 s with the
+  numbers in the README; R1/R2/R3/R5/R6 checked through the API on the loaded data.
+- Item lines load the first page on focus (the list was only fetched on search-input changes,
+  and `hide-no-data` hid the empty menu).
+
+**Rejected / corrected:**
+- **`cache-items` + `no-filter` with server-side search** (AI-generated in both item and agency
+  autocompletes) shows every result ever loaded, not the current search: after the first page
+  loads, searching "caneta" would still list unrelated items. Removed; the selected entry is
+  kept in the options by hand so its label stays visible, and the search Vuetify fires when it
+  writes the selected label into the box is ignored.
+
+## 2026-11-17 — Full verification from a clean clone
+
+**Asked:** verify everything from scratch against `CLAUDE.md` and the README.
+
+**Accepted (verified):** 30/30 tests on a clean clone; no-cache `docker compose up` (zip and
+extracted CSVs, re-run skip, empty `data/`, `.env` ports); every API endpoint and error code;
+R1–R6 also under parallel HTTP load; invariants checked in SQL on the loaded data; the UI driven
+in a headless browser (including the R5 conflict screen); the lock-order mutation from ADR 0003
+reproduced (removing the sort → real PostgreSQL deadlocks).
+
+**Rejected / corrected:**
+- **"The 2,893 / 328 divergences come only from duplicated lines" is imprecise.** Recomputed
+  independently from the raw CSVs: 2,893 / 328 is the naive sum of every line of confirmed ids,
+  which also adds the negative quantities. Removing duplicates alone leaves 707 divergent items;
+  excluding unknown-agency orders leaves 331; excluding orders with invalid lines gives 0. The
+  conclusion stands, but the docs should give this breakdown instead of "only duplicates".

@@ -6,13 +6,12 @@
     :search-input.sync="search"
     :label="label"
     :item-value="itemValue"
-    :item-text="(a) => `${a.acronym} — ${a.name}`"
+    :item-text="agencyText"
     :clearable="clearable"
     :rules="rules"
     no-filter
     hide-no-data
-    cache-items
-    @input="$emit('input', $event)"
+    @input="onInput"
   />
 </template>
 
@@ -29,9 +28,14 @@ export default {
     clearable: { type: Boolean, default: false },
     rules: { type: Array, default: () => [] }
   },
-  data: () => ({ agencies: [], loading: false, search: null, timer: null }),
+  data: () => ({ agencies: [], selected: null, loading: false, search: null, timer: null }),
   watch: {
+    value(v) {
+      if (v == null) this.selected = null
+    },
     search(text) {
+      // Selecting an agency fills the search box with its label: that is not a new search.
+      if (this.selected && text === this.agencyText(this.selected)) return
       clearTimeout(this.timer)
       this.timer = setTimeout(() => this.load(text), 250)
     }
@@ -40,10 +44,19 @@ export default {
     this.load('')
   },
   methods: {
+    agencyText: (a) => `${a.acronym} — ${a.name}`,
+    onInput(value) {
+      this.selected = this.agencies.find((a) => a[this.itemValue] === value) || null
+      this.$emit('input', value)
+    },
     async load(text) {
       this.loading = true
       try {
-        this.agencies = (await agenciesApi.search(text || '', 50)).content
+        const found = (await agenciesApi.search(text || '', 50)).content
+        // No cache-items (with no-filter it would keep showing stale results): keep only the
+        // selected agency, so its label stays visible.
+        const keep = this.selected && !found.some((a) => a.id === this.selected.id) ? [this.selected] : []
+        this.agencies = keep.concat(found)
       } finally {
         this.loading = false
       }
